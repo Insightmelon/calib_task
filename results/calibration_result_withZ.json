@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "message": "`ftol` termination condition is satisfied.",
+  "num_correspondences": 5,
+  "initial_theta_deg": 50.0,
+  "initial_theta_rad": 0.8726646259971648,
+  "initial_tx_m": 2.856,
+  "initial_ty_m": 0.635,
+  "initial_tz_m": -1.524,
+  "residual_theta_deg": -5.414835886272981,
+  "residual_theta_rad": -0.09450671467060874,
+  "residual_tx_m": -0.24771844825759903,
+  "residual_ty_m": 0.0935979094482582,
+  "final_theta_deg": 44.58516411372702,
+  "final_theta_rad": 0.778157911326556,
+  "final_tx_m": 2.655459303486967,
+  "final_ty_m": 0.45625469178572725,
+  "final_tz_m": -1.524,
+  "rmse_xy_m": 0.102642133785315,
+  "mean_abs_error_x_m": 0.034108293925550016,
+  "mean_abs_error_y_m": 0.07678552577216498,
+  "max_point_error_xy_m": 0.14951660630735147,
+  "robust_loss": "soft_l1",
+  "robust_f_scale_m": 0.1,
+  "final_rotation_matrix_radar_to_lidar": [
+    [
+      0.7122078341641824,
+      -0.7019686609494503,
+      0.0
+    ],
+    [
+      0.7019686609494503,
+      0.7122078341641824,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "final_translation_vector_radar_to_lidar_m": [
+    2.655459303486967,
+    0.45625469178572725,
+    -1.524
+  ]
+}
