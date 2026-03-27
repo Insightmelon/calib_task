@@ -1,3 +1,56 @@
+"""
+project_radar_to_camera.py
+
+Purpose
+-------
+This script performs a qualitative sanity check of the radar-to-lidar calibration
+by projecting radar detections into the camera image.
+
+Pipeline
+--------
+Radar points are transformed as follows:
+    radar (already in lidar frame via initial extrinsics)
+    -> apply residual calibration (yaw + translation refinement)
+    -> transform to camera frame
+    -> project to image plane
+
+Visualization
+-------------
+The script overlays multiple elements onto the camera image to verify alignment:
+
+1. Radar detections (blue circles with white outline)
+   - All radar points are projected
+   - Provides global context and shows clutter / background returns
+
+2. Lidar correspondence (green cross)
+   - Manually selected reflector position in lidar frame
+   - Serves as reference (target location)
+
+3. Refined radar prediction (yellow 'X')
+   - The selected radar correspondence after residual calibration
+   - Represents the predicted reflector location from radar
+
+Interpretation
+--------------
+- Good calibration:
+    The green cross (lidar correspondence) should lie on the reflector in the image.
+    The yellow 'X' (refined radar prediction) should be close to the green cross,
+    especially in the horizontal direction.
+
+    A vertical offset is expected because radar elevation is unreliable and the
+    height (z) is not optimized.
+
+- Radar clutter:
+    Blue points may appear scattered due to multipath or background reflections.
+    These are expected and should not be over-interpreted.
+
+
+Notes
+-----
+- This visualization complements numerical residual analysis by providing
+- an intuitive, image-level validation of calibration quality.
+"""
+
 from __future__ import annotations
 
 import json
@@ -10,25 +63,20 @@ import pandas as pd
 
 
 # =========================
-# User paths: edit here only
+# User config: edit here only
 # =========================
-SCENE_ID = "16"  # one of: 8, 16, 24, 31, 64
-RADAR_CSV = Path("test_data/test_data/16_rad.csv")
-IMAGE_PATH = Path("test_data/test_data/16.jpg")
-OUTPUT_PATH = Path("test_data/test_data/projected_16.jpg")
+SCENE_ID = "24"  # one of: 8, 16, 24, 31, 64
+DATA_DIR = Path("test_data/test_data")
+OUTPUT_DIR = Path("results")
 
 CALIBRATION_JSON = Path("results/calibration_result_withZ.json")
 CAMERA_CALIB_NPZ = Path("cfl_calibration.npz")
 LIDAR_TO_CAMERA_NPZ = Path("lidar2cfl_new_all.npz")
 CORRESPONDENCES_CSV = Path("results/picked_correspondences_withZ.csv")
 
-# The correspondence CSV rows follow the fixed scene order from the task README:
-# row 0 -> scene 8
-# row 1 -> scene 16
-# row 2 -> scene 24
-# row 3 -> scene 31
-# row 4 -> scene 64
-SCENE_ORDER = ["8", "16", "24", "31", "64"]
+RADAR_CSV = DATA_DIR / f"{SCENE_ID}_rad.csv"
+IMAGE_PATH = DATA_DIR / f"{SCENE_ID}.jpg"
+OUTPUT_PATH = OUTPUT_DIR / f"projected_{SCENE_ID}.jpg"
 
 
 def load_radar_points(csv_path: Path) -> np.ndarray:
@@ -65,14 +113,7 @@ def load_residual_correction(json_path: Path) -> Tuple[np.ndarray, np.ndarray]:
 
     c = np.cos(theta)
     s = np.sin(theta)
-    R = np.array(
-        [
-            [c, -s, 0.0],
-            [s, c, 0.0],
-            [0.0, 0.0, 1.0],
-        ],
-        dtype=float,
-    )
+    R = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=float)
     t = np.array([tx, ty, 0.0], dtype=float)
     return R, t
 
@@ -96,11 +137,10 @@ def load_lidar_to_camera(npz_path: Path) -> Tuple[np.ndarray, np.ndarray]:
 def load_correspondence_for_scene(csv_path: Path, scene_id: str) -> Tuple[np.ndarray, np.ndarray]:
     if not csv_path.exists():
         raise FileNotFoundError(f"Correspondence CSV not found: {csv_path}")
-    if scene_id not in SCENE_ORDER:
-        raise ValueError(f"Scene id '{scene_id}' is not supported. Expected one of: {SCENE_ORDER}")
 
     df = pd.read_csv(csv_path)
     required_columns = {
+        "scene_id",
         "radar_x",
         "radar_y",
         "radar_z",
@@ -112,13 +152,16 @@ def load_correspondence_for_scene(csv_path: Path, scene_id: str) -> Tuple[np.nda
     if missing:
         raise ValueError(f"Missing required columns in {csv_path}: {sorted(missing)}")
 
-    row_idx = SCENE_ORDER.index(scene_id)
-    if row_idx >= len(df):
-        raise ValueError(
-            f"Correspondence CSV has only {len(df)} rows, but scene '{scene_id}' needs row {row_idx}."
-        )
+    df = df.copy()
+    df["scene_id"] = df["scene_id"].astype(str)
+    rows = df[df["scene_id"] == str(scene_id)]
+    if rows.empty:
+        available = sorted(df["scene_id"].tolist(), key=int)
+        raise ValueError(f"Scene id '{scene_id}' not found in {csv_path}. Available scene ids: {available}")
+    if len(rows) > 1:
+        raise ValueError(f"Scene id '{scene_id}' appears multiple times in {csv_path}.")
 
-    row = df.iloc[row_idx]
+    row = rows.iloc[0]
     radar_init = row[["radar_x", "radar_y", "radar_z"]].to_numpy(dtype=float)
     lidar_point = row[["lidar_x", "lidar_y", "lidar_z"]].to_numpy(dtype=float)
     return radar_init, lidar_point
@@ -176,22 +219,8 @@ def draw_radar_points(
         u_i = int(round(u))
         v_i = int(round(v))
         if 0 <= u_i < w and 0 <= v_i < h:
-            cv2.circle(
-                output,
-                (u_i, v_i),
-                radius=outline_radius,
-                color=(255, 255, 255),
-                thickness=2,
-                lineType=cv2.LINE_AA,
-            )
-            cv2.circle(
-                output,
-                (u_i, v_i),
-                radius=point_radius,
-                color=(255, 0, 0),
-                thickness=-1,
-                lineType=cv2.LINE_AA,
-            )
+            cv2.circle(output, (u_i, v_i), outline_radius, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.circle(output, (u_i, v_i), point_radius, (255, 0, 0), -1, cv2.LINE_AA)
     return output
 
 
@@ -270,6 +299,8 @@ def main() -> None:
 
     print(f"Saved projection image to: {OUTPUT_PATH}")
     print(f"Scene id: {SCENE_ID}")
+    print(f"Radar CSV: {RADAR_CSV}")
+    print(f"Image path: {IMAGE_PATH}")
     print(f"Radar points total: {len(radar_points)}")
     print(f"Radar points in front of camera: {int(np.sum(in_front_mask))}")
     print(f"Projected radar image points: {len(proj_points)}")
