@@ -89,6 +89,12 @@ python solve_calibration.py
 python project_radar_to_camera.py
 ```
 
+To project a specific scene without editing the script:
+
+```bash
+python project_radar_to_camera.py --scene-id 24
+```
+
 Optional debug step:
 
 ```bash

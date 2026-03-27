@@ -47,7 +47,7 @@ OUTPUT_JSON = Path("results/calibration_result_withZ.json")
 # Optional debug output:
 # Save per-scene residuals before/after refinement for quick numeric inspection.
 # Not required for the main workflow or for camera projection sanity check.
-SAVE_RESIDUALS_CSV = True
+SAVE_RESIDUALS_CSV = False
 OUTPUT_RESIDUALS_CSV = Path("results/residuals_per_point_withZ.csv")
 
 # Initial guess from the README / quick_view.py

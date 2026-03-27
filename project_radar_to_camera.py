@@ -45,6 +45,7 @@ Notes
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Tuple
@@ -63,7 +64,7 @@ from geometry_utils import (
 # =========================
 # User config: edit here only
 # =========================
-SCENE_ID = "8"  # one of: 8, 16, 24, 31, 64
+DEFAULT_SCENE_ID = "8"  # one of: 8, 16, 24, 31, 64
 DATA_DIR = Path("test_data/test_data")
 OUTPUT_DIR = Path("results")
 
@@ -90,6 +91,18 @@ def resolve_data_dir(base_dir: Path = Path("test_data")) -> Path:
         f"Could not find extracted test data under '{base_dir}'. "
         "Expected radar CSV files in either 'test_data/' or 'test_data/test_data/'."
     )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Project radar detections and selected correspondences into the camera image."
+    )
+    parser.add_argument(
+        "--scene-id",
+        default=DEFAULT_SCENE_ID,
+        help="Scene id to project, for example 8, 16, 24, 31, or 64.",
+    )
+    return parser.parse_args()
 
 
 def load_radar_points(csv_path: Path) -> np.ndarray:
@@ -314,11 +327,13 @@ def draw_legend_box(image: np.ndarray) -> np.ndarray:
     return output
 
 def main() -> None:
+    args = parse_args()
+    scene_id = str(args.scene_id)
     data_dir = resolve_data_dir(Path("test_data"))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    radar_csv = data_dir / f"{SCENE_ID}_rad.csv"
-    image_path = data_dir / f"{SCENE_ID}.jpg"
-    output_path = OUTPUT_DIR / f"projected_rad2img_{SCENE_ID}.jpg"
+    radar_csv = data_dir / f"{scene_id}_rad.csv"
+    image_path = data_dir / f"{scene_id}.jpg"
+    output_path = OUTPUT_DIR / f"projected_rad2img_{scene_id}.jpg"
 
     radar_points = load_radar_points(radar_csv)
     R_radar_lidar, t_radar_lidar = load_final_radar_to_lidar(CALIBRATION_JSON)
@@ -326,7 +341,7 @@ def main() -> None:
     K, dist_coeffs = load_camera_calibration(CAMERA_CALIB_NPZ)
     R_lidar_cam, t_lidar_cam = load_lidar_to_camera(LIDAR_TO_CAMERA_NPZ)
 
-    radar_init_point_lidar, lidar_point_lidar = load_correspondence_for_scene(CORRESPONDENCES_CSV, SCENE_ID)
+    radar_init_point_lidar, lidar_point_lidar = load_correspondence_for_scene(CORRESPONDENCES_CSV, scene_id)
 
     radar_points_lidar = transform_points(radar_points, R_radar_lidar, t_radar_lidar)
     radar_points_cam = transform_points(radar_points_lidar, R_lidar_cam, t_lidar_cam)
@@ -351,7 +366,7 @@ def main() -> None:
     cv2.imwrite(str(output_path), output_image)
 
     print(f"Saved projection image to: {output_path}")
-    print(f"Scene id: {SCENE_ID}")
+    print(f"Scene id: {scene_id}")
     print(f"Radar CSV: {radar_csv}")
     print(f"Image path: {image_path}")
     print(f"Radar points total: {len(radar_points)}")

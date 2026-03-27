@@ -6,6 +6,8 @@ __pycache__/
 Thumbs.db
 
 .vscode/
+.venv/
 
 test_data/__MACOSX/
+__MACOSX/
 
