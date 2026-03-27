@@ -71,6 +71,12 @@ This script is not required for the main workflow, but it is useful for a quick 
 
 ## Installation
 
+Extract the provided data archive first:
+
+```bash
+unzip test_data.zip
+```
+
 Install the Python dependencies with:
 
 ```bash
