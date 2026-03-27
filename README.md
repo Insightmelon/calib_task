@@ -1,70 +1,114 @@
-Task: Make a tool to perform the extrinsic calibration of the radar and lidar ( rotation and translation matrix )
+# Radar-Lidar Calibration Task Solution
 
-The radar has no elevation so z component is not reliable and should be ignored, that makes the problem simpler as we need just one angle in the rotation matrix.
+This repository contains my solution to a radar-lidar extrinsic calibration task. The goal is to estimate the radar-to-lidar extrinsics from a small set of scenes containing a corner reflector, using the provided initial guess and validating the result through camera reprojection.
 
-In the test data you have the left front camera, lidar and front left radar (1jpeg, 2csv files). Data with same number is from almost same timestamp.  The camera is not needed for the calibration, it is just for reference reprojection. Basically , what you have are a set of measurements with a corner reflector and the lidar, you could match them and get the task done. We use the corner reflect as that reflection is strong and we ca see the point and also we see the corner reflector in the lidar.
+My workflow is:
 
-screenshot.jpg shows a top view of the lidar and radar points projected on the ground ( blue lidar, red radar ) given some initial guess of transformation. You can use the quick_view.py script to take a look at the data ( use arrows to go through the files ).
+1. select one radar/lidar corner-reflector correspondence per scene with a lightweight viewer
+2. solve a planar residual calibration on top of the provided initial extrinsics
+3. validate the result numerically and by projecting radar points into the camera image
 
-The lidar and radar csv files can be read with : 
+The original task description is preserved in [TASK_README.md](TASK_README.md).
 
-    df = pd.read_csv(path)
-    points = df[['x', 'y', 'z']].to_numpy()
+## Approach
 
-You can use as initial guess the translation : 
+### 1. Correspondence selection
 
-    t = array([ 2.856,  0.635, -1.524]) 
+[quick_view.py](quick_view.py) is based on the viewer script provided with the task and is used to browse the lidar/radar pairs scene by scene and manually select the corner reflector.
 
-and a rotation matrix (if helpful):
+- I extended the provided viewer rather than replacing it with a new tool.
+- Radar points are first transformed into the lidar frame using the provided initial calibration.
+- A selection box is drawn around the reflector region.
+- For lidar, I keep only the top 40% highest points in the selected box before computing the mean point. This helps bias the picked lidar point toward the reflector return instead of ground or nearby clutter.
+- For radar, I compute the mean of the selected radar points in the same box.
+- One correspondence is extracted per scene and saved automatically to `results/picked_correspondences_withZ.csv`.
+- If the same `scene_id` already exists, the script asks whether to overwrite it.
+- I also added automatic creation of the `results/` folder when needed.
 
-        th = np.deg2rad(50)
-        R = np.array([[np.cos(th), -np.sin(th), 0.0],
-                        [np.sin(th),  np.cos(th), 0.0],
-                        [0.0,         0.0,        1.0]])
+### 2. Calibration solve
 
-What you need to find is basically the true **t** and the angle **th**.
+[solve_calibration.py](solve_calibration.py) reads the picked correspondences and estimates a residual planar correction.
 
-You can reproject on camera and see if results are ok. To read the calibration files use :
+- The radar correspondences stored in the CSV are already pre-aligned into the lidar frame using the initial guess from `quick_view.py`.
+- I therefore solve for a residual 2D rigid transform in the ground plane.
+- Since radar elevation is unreliable, I optimize only `yaw`, `tx`, and `ty`, while keeping `tz` fixed from the provided initial calibration.
+- I use `scipy.optimize.least_squares` with a robust loss to reduce the influence of imperfect manual picks and measurement noise.
+- The residual correction is then composed with the initial transform to produce the final absolute radar-to-lidar extrinsics.
 
-    Camera intrinsics like in open cv (https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html) , camera matrix (K) and distortion coeffcients : 
+The main output is `results/calibration_result_withZ.json`.
 
-    calib = np.load(calib_cam_npz_file_repo)
-    K = calib["camera_matrix"]
-    dist_coeffs = calib["dist_coeffs"]
+An optional per-point residual report can also be generated for quick numeric inspection, but it is not required for the main workflow.
 
-    and lidar to camera extrinsic calibration (translation t and rotation R):
+### 3. Camera projection validation
 
-    calib = np.load(calib_lidar2cam_file_npz_repo)
-    t_lidar_cam = calib["t"]
-    R_lidar_cam = calib["R"]
+[project_radar_to_camera.py](project_radar_to_camera.py) performs a qualitative validation by projecting radar detections into the camera image.
 
-After you find the radar to lidar extrinsics you could find the radar to camera like this :
- 
-    def compose_transform(R_ab, t_ab, R_bc, t_bc):
-        """
-        Compose two transforms:
-          frame_a -> frame_b -> frame_c
-        to get frame_a -> frame_c
-        """
-        R_ac = R_bc @ R_ab
-        t_ac = R_bc @ t_ab + t_bc
-        return R_ac, t_ac
+- Radar points are transformed using the estimated radar-to-lidar extrinsics and the provided lidar-to-camera extrinsics.
+- The manually selected lidar correspondence and the refined radar correspondence are also projected into the image.
+- The script saves an output image per scene in `results/`, for example `projected_rad2img_16.jpg`.
 
-    R_radar_cam, t_radar_cam = compose_transform(R_radar_lidar, t_radar_lidar, R_lidar_cam, t_lidar_cam)
-  
- Then project with code similar to this for instance :
+What I check in the projected image:
 
-     def project_to_image(points_cam, K, dist_coeffs):
-        """Project 3D points in camera frame onto image plane."""
-        proj_points, _ = cv2.projectPoints(
-            points_cam, np.zeros((3, 1)), np.zeros((3, 1)), K, dist_coeffs
-        )
-        return proj_points.reshape(-1, 2)
+- the lidar correspondence should align with the reflector in the image
+- the refined radar correspondence should lie close to it, especially horizontally
+- some vertical offset is expected because radar z is unreliable and was not optimized
 
-     radar_points_cam = (R_radar_cam @ radar_points.T).T + t_radar_cam
-     proj_points = project_to_image(radar_points_cam, K, dist_coeffs)
-    
+### 4. Optional debug visualization
 
-USE AI to not spend ages on it ! Use whatever you like to code and send us your github link. Write 3-4 lines to explain what you have done.
-Hint : All you need to do is find corespondences (the corner reflector in various sensing modalities) and find the best fit transformation with your favorite solver. Each set of (radar,lidar) will give you one corespondence. Quick results are more fancy than elaborate GUIs. Things are not going to be perfect, recall radar has no elevation measurement.  
+[debug_visualize_calibration_residual.py](debug_visualize_calibration_residual.py) is an optional debug script. It plots radar points before refinement, radar points after refinement, and lidar correspondences in the XY plane to show whether the residual calibration reduces the mismatch.
+
+This script is not required for the main workflow, but it is useful for a quick sanity check without going through camera projection.
+
+## Repository Structure
+
+- `quick_view.py`: manually pick radar/lidar correspondences
+- `solve_calibration.py`: estimate radar-to-lidar calibration from picked correspondences
+- `project_radar_to_camera.py`: validate calibration by reprojection into the camera image
+- `debug_visualize_calibration_residual.py`: optional 2D debug visualization
+- `geometry_utils.py`: shared rigid-transform and rotation helpers
+- `results/`: generated correspondences, calibration outputs, debug plots, and projected images
+
+## Installation
+
+Install the Python dependencies with:
+
+```bash
+pip install -r requirements.txt
+```
+
+Note: `quick_view.py` uses `tkinter`, which should be available in a standard local Python installation with Tk support.
+
+## Main Workflow
+
+Run the scripts in this order:
+
+```bash
+python quick_view.py
+python solve_calibration.py
+python project_radar_to_camera.py
+```
+
+Optional debug step:
+
+```bash
+python debug_visualize_calibration_residual.py
+```
+
+## Outputs
+
+The scripts generate outputs under `results/`, including:
+
+- `picked_correspondences_withZ.csv`: one picked radar/lidar correspondence per scene
+- `calibration_result_withZ.json`: estimated final radar-to-lidar extrinsics
+- `projected_rad2img_<scene>.jpg`: camera reprojection validation images
+- `calibration_before_after_refinement.jpg`: optional XY-plane debug plot
+- `residuals_per_point_withZ.csv`: optional per-point residual report
+
+I also kept screenshot images of the selected regions for each scene in `results/` for convenience when reviewing the picked correspondences without reopening the viewer.
+
+## Notes
+
+- This solution intentionally favors a simple, task-focused workflow over a heavier fully automatic registration pipeline.
+- I did not use ICP because the task can be solved reliably from sparse manually selected corner-reflector correspondences, and the README explicitly suggests a quick correspondence-based approach.
+- The calibration model is intentionally constrained to the ground plane because radar elevation is unreliable in this dataset.
 
