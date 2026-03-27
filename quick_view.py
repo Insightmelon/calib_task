@@ -244,8 +244,8 @@ class LidarRadarTkViewer:
         radar_mean = None
 
         if len(sel_lidar) > 0:
-            # keep only the top 30% highest lidar points in the selected box
-            z_threshold = np.percentile(sel_lidar[:, 2], 70)
+            # keep only the top 40% highest lidar points in the selected box
+            z_threshold = np.percentile(sel_lidar[:, 2], 60)
             sel_lidar_top = sel_lidar[sel_lidar[:, 2] >= z_threshold]
 
             # fallback in case filtering becomes too aggressive
