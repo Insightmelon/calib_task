@@ -154,9 +154,18 @@ class LidarRadarTkViewer:
         sel_radar = in_rect(self.radar_points)
 
         if len(sel_lidar) > 0:
-            mean = sel_lidar.mean(axis=0)
+            # keep only the top 30% highest lidar points in the selected box
+            z_threshold = np.percentile(sel_lidar[:, 2], 70)
+            sel_lidar_top = sel_lidar[sel_lidar[:, 2] >= z_threshold]
+
+            # fallback in case filtering becomes too aggressive
+            if len(sel_lidar_top) == 0:
+                sel_lidar_top = sel_lidar
+
+            mean = sel_lidar_top.mean(axis=0)
             self.lidar_means = np.vstack([self.lidar_means, mean])
             print(f"Lidar mean: {mean}")
+            print(f"Selected lidar points: {len(sel_lidar)}, top-z used: {len(sel_lidar_top)}")
         if len(sel_radar) > 0:
             mean = sel_radar.mean(axis=0)
             self.radar_means = np.vstack([self.radar_means, mean])
@@ -206,10 +215,8 @@ def get_matrices_init(radar_position):
 if __name__ == "__main__":
     
     radar_selected = "FL"  # Change to "FR", "FC", "RL", or "RR" as needed
-    FOLDER = "/Users/robertkrutsch/Downloads/test_data/"
+    FOLDER = "C:/Users/Jian/Desktop/A_Technical_Task/calib_test/test_data/test_data"
 
     R_ref,t_ref = get_matrices_init(radar_selected)
 
     viewer = LidarRadarTkViewer(FOLDER, point_radius=2,R=R_ref,t=t_ref)
-
-
