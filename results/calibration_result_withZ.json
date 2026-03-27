@@ -2,6 +2,13 @@
   "success": true,
   "message": "`ftol` termination condition is satisfied.",
   "num_correspondences": 5,
+  "scene_ids": [
+    "8",
+    "16",
+    "24",
+    "31",
+    "64"
+  ],
   "initial_theta_deg": 50.0,
   "initial_theta_rad": 0.8726646259971648,
   "initial_tx_m": 2.856,
@@ -22,6 +29,14 @@
   "max_point_error_xy_m": 0.14951660630735147,
   "robust_loss": "soft_l1",
   "robust_f_scale_m": 0.1,
+  "key_results": {
+    "final_theta_deg": 44.58516411372702,
+    "final_translation_xyz_m": [
+      2.655459303486967,
+      0.45625469178572725,
+      -1.524
+    ]
+  },
   "final_rotation_matrix_radar_to_lidar": [
     [
       0.7122078341641824,
