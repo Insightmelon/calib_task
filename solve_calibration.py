@@ -37,8 +37,9 @@ from scipy.optimize import least_squares
 INPUT_CSV = Path("results/picked_correspondences_withZ.csv")
 OUTPUT_JSON = Path("results/calibration_result_withZ.json")
 
-# Keep this optional. It is still useful for quick numeric inspection,
-# but not required for the camera projection sanity check.
+# Optional debug output:
+# Save per-scene residuals before/after refinement for quick numeric inspection.
+# Not required for the main workflow or for camera projection sanity check.
 SAVE_RESIDUALS_CSV = False
 OUTPUT_RESIDUALS_CSV = Path("results/residuals_per_point_withZ.csv")
 
