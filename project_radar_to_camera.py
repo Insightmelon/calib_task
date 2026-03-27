@@ -11,8 +11,8 @@ Pipeline
 Radar points are transformed as follows:
     radar (already in lidar frame via initial extrinsics)
     -> apply residual calibration (yaw + translation refinement)
-    -> transform to camera frame
-    -> project to image plane
+    -> lidar-to-camera extrinsics
+    -> image plane projection
 
 Visualization
 -------------
@@ -32,17 +32,9 @@ The script overlays multiple elements onto the camera image to verify alignment:
 
 Interpretation
 --------------
-- Good calibration:
-    The green cross (lidar correspondence) should lie on the reflector in the image.
-    The yellow 'X' (refined radar prediction) should be close to the green cross,
-    especially in the horizontal direction.
-
-    A vertical offset is expected because radar elevation is unreliable and the
-    height (z) is not optimized.
-
-- Radar clutter:
-    Blue points may appear scattered due to multipath or background reflections.
-    These are expected and should not be over-interpreted.
+The green cross should lie on the reflector in the image. The yellow X should be
+close to the green cross, especially in the horizontal direction. A vertical
+offset is expected because radar elevation is unreliable and z is not optimized.
 
 
 Notes
@@ -65,7 +57,7 @@ import pandas as pd
 # =========================
 # User config: edit here only
 # =========================
-SCENE_ID = "24"  # one of: 8, 16, 24, 31, 64
+SCENE_ID = "8"  # one of: 8, 16, 24, 31, 64
 DATA_DIR = Path("test_data/test_data")
 OUTPUT_DIR = Path("results")
 
@@ -76,7 +68,7 @@ CORRESPONDENCES_CSV = Path("results/picked_correspondences_withZ.csv")
 
 RADAR_CSV = DATA_DIR / f"{SCENE_ID}_rad.csv"
 IMAGE_PATH = DATA_DIR / f"{SCENE_ID}.jpg"
-OUTPUT_PATH = OUTPUT_DIR / f"projected_{SCENE_ID}.jpg"
+OUTPUT_PATH = OUTPUT_DIR / f"projected_rad2img_{SCENE_ID}.jpg"
 
 
 def load_radar_points(csv_path: Path) -> np.ndarray:
@@ -156,7 +148,7 @@ def load_correspondence_for_scene(csv_path: Path, scene_id: str) -> Tuple[np.nda
     df["scene_id"] = df["scene_id"].astype(str)
     rows = df[df["scene_id"] == str(scene_id)]
     if rows.empty:
-        available = sorted(df["scene_id"].tolist(), key=int)
+        available = sorted(df["scene_id"].unique().tolist(), key=int)
         raise ValueError(f"Scene id '{scene_id}' not found in {csv_path}. Available scene ids: {available}")
     if len(rows) > 1:
         raise ValueError(f"Scene id '{scene_id}' appears multiple times in {csv_path}.")
@@ -211,23 +203,24 @@ def draw_radar_points(
     proj_points: np.ndarray,
     point_radius: int = 6,
     outline_radius: int = 8,
+    outline_thickness: int = 2,
 ) -> np.ndarray:
     output = image.copy()
     h, w = output.shape[:2]
 
     for u, v in proj_points:
-        u_i = int(round(u))
-        v_i = int(round(v))
+        u_i = int(round(float(u)))
+        v_i = int(round(float(v)))
         if 0 <= u_i < w and 0 <= v_i < h:
-            cv2.circle(output, (u_i, v_i), outline_radius, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.circle(output, (u_i, v_i), outline_radius, (255, 255, 255), outline_thickness, cv2.LINE_AA)
             cv2.circle(output, (u_i, v_i), point_radius, (255, 0, 0), -1, cv2.LINE_AA)
     return output
 
-
-def draw_cross(
+def draw_marker(
     image: np.ndarray,
     point_uv: np.ndarray | None,
     color: Tuple[int, int, int],
+    marker_type: str,
     size: int = 14,
     thickness: int = 2,
 ) -> np.ndarray:
@@ -236,39 +229,82 @@ def draw_cross(
 
     output = image.copy()
     h, w = output.shape[:2]
-    u_i = int(round(point_uv[0]))
-    v_i = int(round(point_uv[1]))
+    u_i = int(round(float(point_uv[0])))
+    v_i = int(round(float(point_uv[1])))
+
     if not (0 <= u_i < w and 0 <= v_i < h):
         return output
 
-    cv2.line(output, (u_i - size, v_i), (u_i + size, v_i), color, thickness, cv2.LINE_AA)
-    cv2.line(output, (u_i, v_i - size), (u_i, v_i + size), color, thickness, cv2.LINE_AA)
+    if marker_type == "cross":
+        cv2.line(output, (u_i - size, v_i), (u_i + size, v_i), color, thickness, cv2.LINE_AA)
+        cv2.line(output, (u_i, v_i - size), (u_i, v_i + size), color, thickness, cv2.LINE_AA)
+    elif marker_type == "x":
+        cv2.line(output, (u_i - size, v_i - size), (u_i + size, v_i + size), color, thickness, cv2.LINE_AA)
+        cv2.line(output, (u_i - size, v_i + size), (u_i + size, v_i - size), color, thickness, cv2.LINE_AA)
+    else:
+        raise ValueError(f"Unsupported marker_type: {marker_type}")
+
     return output
 
-
-def draw_x_marker(
-    image: np.ndarray,
-    point_uv: np.ndarray | None,
-    color: Tuple[int, int, int],
-    size: int = 14,
-    thickness: int = 2,
-) -> np.ndarray:
-    if point_uv is None:
-        return image
+def draw_legend_box(image: np.ndarray) -> np.ndarray:
+    legend_items = [
+        ("radar points", (255, 0, 0)),          # blue
+        ("lidar correspondence", (0, 255, 0)),  # green
+        ("refined radar correspondence", (0, 255, 255)),  # yellow
+    ]
 
     output = image.copy()
+    overlay = output.copy()
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
     h, w = output.shape[:2]
-    u_i = int(round(point_uv[0]))
-    v_i = int(round(point_uv[1]))
-    if not (0 <= u_i < w and 0 <= v_i < h):
-        return output
 
-    cv2.line(output, (u_i - size, v_i - size), (u_i + size, v_i + size), color, thickness, cv2.LINE_AA)
-    cv2.line(output, (u_i - size, v_i + size), (u_i + size, v_i - size), color, thickness, cv2.LINE_AA)
+    font_scale = max(0.8, min(1.1, w / 1600.0))
+    text_thickness = 2
+    padding = max(14, int(round(w / 120.0)))
+    margin = max(12, int(round(w / 140.0)))
+
+    text_sizes = [
+        cv2.getTextSize(text, font, font_scale, text_thickness)[0]
+        for text, _ in legend_items
+    ]
+    max_text_width = max(size[0] for size in text_sizes)
+    max_text_height = max(size[1] for size in text_sizes)
+
+    line_gap = max(10, int(round(max_text_height * 0.8)))
+    line_step = max_text_height + line_gap
+
+    box_width = max_text_width + 2 * padding
+    box_height = len(legend_items) * line_step + 2 * padding - line_gap
+
+    x1 = w - box_width - margin
+    y1 = margin
+    x2 = w - margin
+    y2 = y1 + box_height
+
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (220, 220, 220), -1) #background color
+    output = cv2.addWeighted(overlay, 0.9, output, 0.1, 0.0)
+    cv2.rectangle(output, (x1, y1), (x2, y2), (120, 120, 120), 1, cv2.LINE_AA)
+
+    baseline_y = y1 + padding + max_text_height
+
+    for idx, (text, color) in enumerate(legend_items):
+        y = baseline_y + idx * line_step
+        cv2.putText(
+            output,
+            text,
+            (x1 + padding, y),
+            font,
+            font_scale,
+            color,
+            text_thickness,
+            cv2.LINE_AA,
+        )
+
     return output
-
 
 def main() -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     radar_points = load_radar_points(RADAR_CSV)
     R_radar_lidar, t_radar_lidar = load_final_radar_to_lidar(CALIBRATION_JSON)
     R_residual, t_residual = load_residual_correction(CALIBRATION_JSON)
@@ -293,8 +329,10 @@ def main() -> None:
         raise FileNotFoundError(f"Could not read image: {IMAGE_PATH}")
 
     output_image = draw_radar_points(image, proj_points)
-    output_image = draw_cross(output_image, lidar_uv, color=(0, 255, 0), size=14, thickness=2)
-    output_image = draw_x_marker(output_image, refined_radar_uv, color=(0, 255, 255), size=14, thickness=2)
+    output_image = draw_marker(output_image, lidar_uv, color=(0, 255, 0), marker_type="cross", size=14, thickness=2)
+    output_image = draw_marker(output_image, refined_radar_uv, color=(0, 255, 255), marker_type="x", size=14, thickness=2)
+    output_image = draw_legend_box(output_image)
+
     cv2.imwrite(str(OUTPUT_PATH), output_image)
 
     print(f"Saved projection image to: {OUTPUT_PATH}")
