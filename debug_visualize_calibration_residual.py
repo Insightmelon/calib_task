@@ -24,47 +24,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from geometry_utils import apply_planar_transform_xy
+
 
 INPUT_CSV = Path("results/picked_correspondences_withZ.csv")
 INPUT_JSON = Path("results/calibration_result_withZ.json")
 OUTPUT_PLOT = Path("results/calibration_before_after_refinement.jpg")
-
-
-def rotation_matrix_2d(theta_rad: float) -> np.ndarray:
-    """
-    Create a 2D rotation matrix.
-
-    Args:
-        theta_rad: Rotation angle in radians.
-
-    Returns:
-        A 2x2 rotation matrix.
-    """
-    c = np.cos(theta_rad)
-    s = np.sin(theta_rad)
-    return np.array([[c, -s],
-                     [s,  c]], dtype=float)
-
-
-def apply_residual_correction(
-    radar_init_xy: np.ndarray,
-    residual_theta_rad: float,
-    residual_translation_xy: np.ndarray,
-) -> np.ndarray:
-    """
-    Apply the residual planar correction to pre-aligned radar points.
-
-    Args:
-        radar_init_xy: Radar points already in lidar frame after initial alignment.
-        residual_theta_rad: Residual yaw correction in radians.
-        residual_translation_xy: Residual translation [dtx, dty].
-
-    Returns:
-        Refined radar points in lidar frame.
-    """
-    rotation = rotation_matrix_2d(residual_theta_rad)
-    return (rotation @ radar_init_xy.T).T + residual_translation_xy
-
 
 def load_correspondences(csv_path: Path) -> Tuple[List[str], np.ndarray, np.ndarray]:
     """
@@ -177,10 +142,10 @@ def main() -> None:
     scene_ids, radar_before_xy, lidar_xy = load_correspondences(INPUT_CSV)
     residual_theta_rad, residual_tx_m, residual_ty_m = load_result(INPUT_JSON)
 
-    radar_after_xy = apply_residual_correction(
-        radar_init_xy=radar_before_xy,
-        residual_theta_rad=residual_theta_rad,
-        residual_translation_xy=np.array([residual_tx_m, residual_ty_m], dtype=float),
+    radar_after_xy = apply_planar_transform_xy(
+        points_xy=radar_before_xy,
+        theta_rad=residual_theta_rad,
+        translation_xy=np.array([residual_tx_m, residual_ty_m], dtype=float),
     )
 
     plot_before_after_refinement(

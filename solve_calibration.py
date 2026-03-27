@@ -29,6 +29,13 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
+from geometry_utils import (
+    apply_planar_transform_xy,
+    compose_transform,
+    rotation_matrix_3d_from_yaw,
+    yaw_from_rotation_matrix,
+)
+
 
 # ---------------------------------------------------------------------
 # Configuration
@@ -40,7 +47,7 @@ OUTPUT_JSON = Path("results/calibration_result_withZ.json")
 # Optional debug output:
 # Save per-scene residuals before/after refinement for quick numeric inspection.
 # Not required for the main workflow or for camera projection sanity check.
-SAVE_RESIDUALS_CSV = False
+SAVE_RESIDUALS_CSV = True
 OUTPUT_RESIDUALS_CSV = Path("results/residuals_per_point_withZ.csv")
 
 # Initial guess from the README / quick_view.py
@@ -95,100 +102,6 @@ class CalibrationResult:
     # Solver configuration
     robust_loss: str
     robust_f_scale_m: float
-
-
-# ---------------------------------------------------------------------
-# Geometry helpers
-# ---------------------------------------------------------------------
-
-def rotation_matrix_2d(theta_rad: float) -> np.ndarray:
-    """
-    Create a 2D rotation matrix for yaw rotation.
-
-    Args:
-        theta_rad: Yaw angle in radians.
-
-    Returns:
-        A 2x2 rotation matrix.
-    """
-    c = np.cos(theta_rad)
-    s = np.sin(theta_rad)
-    return np.array([[c, -s], [s, c]], dtype=float)
-
-
-def rotation_matrix_3d_from_yaw(theta_rad: float) -> np.ndarray:
-    """
-    Create a 3D rotation matrix for rotation around z-axis only.
-
-    Args:
-        theta_rad: Yaw angle in radians.
-
-    Returns:
-        A 3x3 rotation matrix.
-    """
-    c = np.cos(theta_rad)
-    s = np.sin(theta_rad)
-    return np.array([[c, -s, 0.0],
-                     [s,  c, 0.0],
-                     [0.0, 0.0, 1.0]], dtype=float)
-
-
-def apply_planar_transform_xy(
-    points_xy: np.ndarray,
-    theta_rad: float,
-    translation_xy: np.ndarray,
-) -> np.ndarray:
-    """
-    Apply a planar rigid transform in x-y.
-
-    Args:
-        points_xy: Array of shape (N, 2).
-        theta_rad: Rotation angle in radians.
-        translation_xy: Array [tx, ty].
-
-    Returns:
-        Transformed points of shape (N, 2).
-    """
-    rotation = rotation_matrix_2d(theta_rad)
-    return (rotation @ points_xy.T).T + translation_xy
-
-
-def compose_transform(
-    R_ab: np.ndarray,
-    t_ab: np.ndarray,
-    R_bc: np.ndarray,
-    t_bc: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compose two transforms:
-        frame_a -> frame_b
-        frame_b -> frame_c
-    to obtain:
-        frame_a -> frame_c
-
-    Args:
-        R_ab, t_ab: Transform from frame a to frame b.
-        R_bc, t_bc: Transform from frame b to frame c.
-
-    Returns:
-        R_ac, t_ac
-    """
-    R_ac = R_bc @ R_ab
-    t_ac = R_bc @ t_ab + t_bc
-    return R_ac, t_ac
-
-
-def yaw_from_rotation_matrix(R: np.ndarray) -> float:
-    """
-    Extract yaw from a rotation matrix under the assumption that only z-rotation matters.
-
-    Args:
-        R: 3x3 rotation matrix.
-
-    Returns:
-        Yaw angle in radians.
-    """
-    return float(np.arctan2(R[1, 0], R[0, 0]))
 
 
 # ---------------------------------------------------------------------

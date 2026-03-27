@@ -53,11 +53,17 @@ import cv2
 import numpy as np
 import pandas as pd
 
+from geometry_utils import (
+    rotation_matrix_3d_from_yaw,
+    transform_point,
+    transform_points,
+)
+
 
 # =========================
 # User config: edit here only
 # =========================
-SCENE_ID = "8"  # one of: 8, 16, 24, 31, 64
+SCENE_ID = "31"  # one of: 8, 16, 24, 31, 64
 DATA_DIR = Path("test_data/test_data")
 OUTPUT_DIR = Path("results")
 
@@ -103,9 +109,7 @@ def load_residual_correction(json_path: Path) -> Tuple[np.ndarray, np.ndarray]:
     tx = float(data["residual_tx_m"])
     ty = float(data["residual_ty_m"])
 
-    c = np.cos(theta)
-    s = np.sin(theta)
-    R = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+    R = rotation_matrix_3d_from_yaw(theta)
     t = np.array([tx, ty, 0.0], dtype=float)
     return R, t
 
@@ -157,15 +161,6 @@ def load_correspondence_for_scene(csv_path: Path, scene_id: str) -> Tuple[np.nda
     radar_init = row[["radar_x", "radar_y", "radar_z"]].to_numpy(dtype=float)
     lidar_point = row[["lidar_x", "lidar_y", "lidar_z"]].to_numpy(dtype=float)
     return radar_init, lidar_point
-
-
-def transform_points(points: np.ndarray, R: np.ndarray, t: np.ndarray) -> np.ndarray:
-    return (R @ points.T).T + t
-
-
-def transform_point(point: np.ndarray, R: np.ndarray, t: np.ndarray) -> np.ndarray:
-    return R @ point + t
-
 
 def project_to_image(points_cam: np.ndarray, K: np.ndarray, dist_coeffs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     in_front_mask = points_cam[:, 2] > 0.0
