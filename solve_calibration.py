@@ -283,6 +283,7 @@ def save_calibration_result(
     t_final: np.ndarray,
     output_path: Path,
 ) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(result)
 
     # Highlight the key deliverables for downstream scripts and for quick reading.
@@ -309,6 +310,7 @@ def save_residual_report(
         refined_radar_xy: Refined radar points in lidar frame, shape (N, 2).
         output_path: Output CSV path.
     """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     out_df = df.copy()
     out_df["refined_radar_x"] = refined_radar_xy[:, 0]
     out_df["refined_radar_y"] = refined_radar_xy[:, 1]

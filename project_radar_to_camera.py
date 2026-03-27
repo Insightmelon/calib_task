@@ -63,7 +63,7 @@ from geometry_utils import (
 # =========================
 # User config: edit here only
 # =========================
-SCENE_ID = "31"  # one of: 8, 16, 24, 31, 64
+SCENE_ID = "8"  # one of: 8, 16, 24, 31, 64
 DATA_DIR = Path("test_data/test_data")
 OUTPUT_DIR = Path("results")
 
@@ -72,9 +72,24 @@ CAMERA_CALIB_NPZ = Path("cfl_calibration.npz")
 LIDAR_TO_CAMERA_NPZ = Path("lidar2cfl_new_all.npz")
 CORRESPONDENCES_CSV = Path("results/picked_correspondences_withZ.csv")
 
-RADAR_CSV = DATA_DIR / f"{SCENE_ID}_rad.csv"
-IMAGE_PATH = DATA_DIR / f"{SCENE_ID}.jpg"
-OUTPUT_PATH = OUTPUT_DIR / f"projected_rad2img_{SCENE_ID}.jpg"
+
+def resolve_data_dir(base_dir: Path = Path("test_data")) -> Path:
+    """
+    Resolve the extracted test-data directory.
+
+    The provided zip may unpack either as:
+      test_data/
+    or:
+      test_data/test_data/
+    """
+    candidates = [base_dir / "test_data", base_dir]
+    for candidate in candidates:
+        if candidate.exists() and any(candidate.glob("*_rad.csv")):
+            return candidate
+    raise FileNotFoundError(
+        f"Could not find extracted test data under '{base_dir}'. "
+        "Expected radar CSV files in either 'test_data/' or 'test_data/test_data/'."
+    )
 
 
 def load_radar_points(csv_path: Path) -> np.ndarray:
@@ -299,8 +314,13 @@ def draw_legend_box(image: np.ndarray) -> np.ndarray:
     return output
 
 def main() -> None:
+    data_dir = resolve_data_dir(Path("test_data"))
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    radar_points = load_radar_points(RADAR_CSV)
+    radar_csv = data_dir / f"{SCENE_ID}_rad.csv"
+    image_path = data_dir / f"{SCENE_ID}.jpg"
+    output_path = OUTPUT_DIR / f"projected_rad2img_{SCENE_ID}.jpg"
+
+    radar_points = load_radar_points(radar_csv)
     R_radar_lidar, t_radar_lidar = load_final_radar_to_lidar(CALIBRATION_JSON)
     R_residual, t_residual = load_residual_correction(CALIBRATION_JSON)
     K, dist_coeffs = load_camera_calibration(CAMERA_CALIB_NPZ)
@@ -319,21 +339,21 @@ def main() -> None:
     refined_radar_uv = project_single_point(refined_radar_point_cam, K, dist_coeffs)
     lidar_uv = project_single_point(lidar_point_cam, K, dist_coeffs)
 
-    image = cv2.imread(str(IMAGE_PATH))
+    image = cv2.imread(str(image_path))
     if image is None:
-        raise FileNotFoundError(f"Could not read image: {IMAGE_PATH}")
+        raise FileNotFoundError(f"Could not read image: {image_path}")
 
     output_image = draw_radar_points(image, proj_points)
     output_image = draw_marker(output_image, lidar_uv, color=(0, 255, 0), marker_type="cross", size=14, thickness=2)
     output_image = draw_marker(output_image, refined_radar_uv, color=(0, 255, 255), marker_type="x", size=14, thickness=2)
     output_image = draw_legend_box(output_image)
 
-    cv2.imwrite(str(OUTPUT_PATH), output_image)
+    cv2.imwrite(str(output_path), output_image)
 
-    print(f"Saved projection image to: {OUTPUT_PATH}")
+    print(f"Saved projection image to: {output_path}")
     print(f"Scene id: {SCENE_ID}")
-    print(f"Radar CSV: {RADAR_CSV}")
-    print(f"Image path: {IMAGE_PATH}")
+    print(f"Radar CSV: {radar_csv}")
+    print(f"Image path: {image_path}")
     print(f"Radar points total: {len(radar_points)}")
     print(f"Radar points in front of camera: {int(np.sum(in_front_mask))}")
     print(f"Projected radar image points: {len(proj_points)}")

@@ -133,6 +133,7 @@ def plot_before_after_refinement(
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=200)
     plt.show()
 

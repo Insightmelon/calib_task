@@ -32,6 +32,25 @@ def get_file_pairs(folder):
             pairs.append((os.path.join(folder, f), os.path.join(folder, radar_candidate)))
     return pairs
 
+
+def resolve_data_dir(base_dir=Path("test_data")):
+    """
+    Resolve the extracted test-data directory.
+
+    The provided zip may unpack either as:
+      test_data/
+    or:
+      test_data/test_data/
+    """
+    candidates = [Path(base_dir) / "test_data", Path(base_dir)]
+    for candidate in candidates:
+        if candidate.exists() and any(candidate.glob("*_rad.csv")):
+            return candidate
+    raise FileNotFoundError(
+        f"Could not find extracted test data under '{base_dir}'. "
+        "Expected radar CSV files in either 'test_data/' or 'test_data/test_data/'."
+    )
+
 # ---------------------------
 # CSV helpers
 # ---------------------------
@@ -315,7 +334,7 @@ def get_matrices_init(radar_position):
 if __name__ == "__main__":
     
     radar_selected = "FL"  # Change to "FR", "FC", "RL", or "RR" as needed
-    FOLDER = Path("test_data/test_data") # with regarding to cwd
+    FOLDER = resolve_data_dir()
     RESULTS_DIR = Path("results")
     OUTPUT_CSV_NAME = "picked_correspondences_withZ.csv"
 
