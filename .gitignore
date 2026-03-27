@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.pyo
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+
+test_data/__MACOSX/
+
